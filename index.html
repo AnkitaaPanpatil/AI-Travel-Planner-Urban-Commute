@@ -1,0 +1,1550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Travel Planner & Urban Commute Optimizer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0fdfa',
+                            100: '#ccfbf1',
+                            500: '#14b8a6',
+                            600: '#0d9488',
+                            700: '#0f766e',
+                            800: '#115e59',
+                            900: '#134e4a',
+                        },
+                        traffic: {
+                            low: '#10b981',
+                            moderate: '#f59e0b',
+                            heavy: '#ef4444',
+                            severe: '#7f1d1d'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+    
+    <style>
+        /* Custom scrollbars and map styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(51, 65, 85, 0.8);
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(71, 85, 105, 1);
+        }
+        .leaflet-popup-content-wrapper {
+            background: #0f172a;
+            color: #f8fafc;
+            border: 1px solid #334155;
+            border-radius: 0.75rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+        }
+        .leaflet-popup-tip {
+            background: #0f172a;
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(51, 65, 85, 0.5);
+        }
+        .pulse-dot {
+            animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(20, 184, 166, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(20, 184, 166, 0); }
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col antialiased selection:bg-teal-500 selection:text-white">
+
+    <header class="border-b border-slate-800 bg-slate-900/90 sticky top-0 z-50 backdrop-blur-md px-4 lg:px-8 py-3">
+        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-teal-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-teal-500/20 text-slate-950 font-bold text-xl">
+                    <i class="fa-solid fa-route"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight bg-gradient-to-r from-teal-300 via-cyan-200 to-white bg-clip-text text-transparent">
+                        NexusVoyage AI
+                    </h1>
+                    <p class="text-xs text-slate-400">Urban Commute & Tourism Optimization Engine</p>
+                </div>
+            </div>
+
+            <!-- City Preset Selector & Global Modes -->
+            <div class="flex items-center flex-wrap gap-2 text-sm">
+                <div class="flex items-center bg-slate-800/80 border border-slate-700 rounded-lg p-1">
+                    <span class="text-xs text-slate-400 px-2 font-medium"><i class="fa-solid fa-location-dot text-teal-400 mr-1"></i> Hub:</span>
+                    <select id="citySelect" class="bg-transparent text-slate-200 font-semibold focus:outline-none pr-3 text-xs cursor-pointer">
+                        <option value="tokyo" class="bg-slate-900">Tokyo, Japan</option>
+                        <option value="newyork" class="bg-slate-900" selected>New York, USA</option>
+                        <option value="london" class="bg-slate-900">London, UK</option>
+                        <option value="paris" class="bg-slate-900">Paris, France</option>
+                        <option value="mumbai" class="bg-slate-900">Mumbai, India</option>
+                    </select>
+                </div>
+
+                <!-- Mode Toggles: Commute vs Tourism -->
+                <div class="inline-flex rounded-lg bg-slate-800 p-1 border border-slate-700">
+                    <button id="tabCommuteBtn" onclick="switchMainTab('commute')" class="px-3 py-1.5 rounded-md text-xs font-medium transition-all bg-teal-600 text-white shadow-sm flex items-center gap-1.5">
+                        <i class="fa-solid fa-train-subway"></i>
+                        <span>Commute Hub</span>
+                    </button>
+                    <button id="tabTourismBtn" onclick="switchMainTab('tourism')" class="px-3 py-1.5 rounded-md text-xs font-medium transition-all text-slate-300 hover:text-white flex items-center gap-1.5">
+                        <i class="fa-solid fa-compass"></i>
+                        <span>Tourism Planner</span>
+                    </button>
+                    <button id="tabCopilotBtn" onclick="switchMainTab('copilot')" class="px-3 py-1.5 rounded-md text-xs font-medium transition-all text-slate-300 hover:text-white flex items-center gap-1.5">
+                        <i class="fa-solid fa-brain text-teal-400"></i>
+                        <span>AI Assistant</span>
+                    </button>
+                </div>
+                
+                <button onclick="refreshTrafficConditions()" title="Recalculate Traffic Sensors" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-teal-400 transition" id="trafficRefreshBtn">
+                    <i class="fa-solid fa-arrows-rotate text-xs"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto p-3 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Left Column: Input Panels & Dynamic Insights (5 Cols) -->
+        <section class="lg:col-span-5 flex flex-col space-y-4">
+            
+            <!-- Quick Live Metric Summary Banner -->
+            <div class="grid grid-cols-3 gap-3">
+                <div class="glass-panel p-3 rounded-xl flex flex-col">
+                    <span class="text-[10px] uppercase font-semibold text-slate-400 flex items-center gap-1">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-ping"></span> Live Congestion
+                    </span>
+                    <span id="statCongestion" class="text-lg font-bold text-emerald-400 mt-1">Moderate (42%)</span>
+                    <span id="statCongestionTrend" class="text-[10px] text-slate-400">Peak hour easing</span>
+                </div>
+                <div class="glass-panel p-3 rounded-xl flex flex-col">
+                    <span class="text-[10px] uppercase font-semibold text-slate-400 flex items-center gap-1">
+                        <i class="fa-solid fa-leaf text-teal-400"></i> Avg Eco Savings
+                    </span>
+                    <span id="statEcoSavings" class="text-lg font-bold text-teal-300 mt-1">-3.4 kg CO₂</span>
+                    <span class="text-[10px] text-slate-400">vs Solo Gas Driving</span>
+                </div>
+                <div class="glass-panel p-3 rounded-xl flex flex-col">
+                    <span class="text-[10px] uppercase font-semibold text-slate-400 flex items-center gap-1">
+                        <i class="fa-solid fa-bolt text-amber-400"></i> Transit Status
+                    </span>
+                    <span id="statTransitStatus" class="text-lg font-bold text-amber-400 mt-1">On Time</span>
+                    <span class="text-[10px] text-slate-400">Subway & Bus sync</span>
+                </div>
+            </div>
+
+            <!-- Tab 1: Commute Optimization Module -->
+            <div id="panelCommute" class="glass-panel p-5 rounded-2xl flex flex-col space-y-4 shadow-xl border-t-2 border-t-teal-500">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div>
+                        <h2 class="font-bold text-slate-100 flex items-center gap-2">
+                            <i class="fa-solid fa-arrows-split-up-and-left text-teal-400"></i>
+                            Smart Commute Router
+                        </h2>
+                        <p class="text-xs text-slate-400">Multi-modal trade-offs: Speed, Cost, & Carbon Footprint</p>
+                    </div>
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-teal-950 text-teal-300 border border-teal-800">
+                        AI Powered
+                    </span>
+                </div>
+
+                <!-- Origin & Destination Form -->
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 mb-1">Origin / Start Location</label>
+                        <div class="relative">
+                            <i class="fa-solid fa-circle-dot absolute left-3 top-3 text-xs text-teal-400"></i>
+                            <input type="text" id="commuteOrigin" value="Grand Central Terminal, NY" class="w-full bg-slate-900 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-500 transition">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 mb-1">Destination</label>
+                        <div class="relative">
+                            <i class="fa-solid fa-flag-checkered absolute left-3 top-3 text-xs text-rose-400"></i>
+                            <input type="text" id="commuteDestination" value="DUMBO, Brooklyn Bridge Park" class="w-full bg-slate-900 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-500 transition">
+                        </div>
+                    </div>
+
+                    <!-- Commute Preference Filters -->
+                    <div class="grid grid-cols-2 gap-2 pt-1">
+                        <div>
+                            <label class="block text-[11px] text-slate-400 mb-1">Priority</label>
+                            <select id="commutePriority" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-teal-500 focus:outline-none">
+                                <option value="fastest">⚡ Fastest Arrival</option>
+                                <option value="eco">🌱 Lowest Carbon Footprint</option>
+                                <option value="cheapest">💰 Most Cost-Effective</option>
+                                <option value="scenic">🌆 Scenic & Comfortable</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] text-slate-400 mb-1">Mode Availability</label>
+                            <select id="commuteModeFilter" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-teal-500 focus:outline-none">
+                                <option value="all">All Modes (Train, Bus, Bike, EV)</option>
+                                <option value="transit_only">Public Transit Only</option>
+                                <option value="active">Active (Micromobility / Bike)</option>
+                                <option value="rideshare">Rideshare & EV Cabs</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Optimize Action Button -->
+                    <button id="btnOptimizeCommute" onclick="handleOptimizeCommute()" class="w-full py-2.5 px-4 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-slate-950 font-bold rounded-lg text-sm shadow-md shadow-teal-500/20 transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        <span>Generate Optimized Commute Options</span>
+                    </button>
+                </div>
+
+                <div id="commuteResultsContainer" class="space-y-2 pt-2 max-h-72 overflow-y-auto pr-1">
+                    <!-- Dynamic multi-modal options injected here -->
+                    <div class="text-center py-6 text-slate-500 text-xs">
+                        <i class="fa-solid fa-compass-drafting text-2xl text-slate-600 mb-2"></i>
+                        <p>Hit "Generate Optimized Commute Options" to calculate live multi-modal itineraries.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 2: Tourism & Sightseeing Planner -->
+            <div id="panelTourism" class="glass-panel p-5 rounded-2xl flex flex-col space-y-4 shadow-xl border-t-2 border-t-cyan-500 hidden">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div>
+                        <h2 class="font-bold text-slate-100 flex items-center gap-2">
+                            <i class="fa-solid fa-map-location-dot text-cyan-400"></i>
+                            AI Smart Tourism Itinerary
+                        </h2>
+                        <p class="text-xs text-slate-400">Curated urban exploration with intelligent routing</p>
+                    </div>
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800">
+                        Tourist Concierge
+                    </span>
+                </div>
+
+                <div class="space-y-3">
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-300 mb-1">Duration</label>
+                            <select id="tourDuration" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none">
+                                <option value="half_day">Half Day (4 Hours)</option>
+                                <option value="full_day" selected>Full Day (8 Hours)</option>
+                                <option value="evening">Evening & Nightlife (4 Hours)</option>
+                                <option value="two_day">2 Days Multi-stop</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-300 mb-1">Traveler Vibe</label>
+                            <select id="tourVibe" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none">
+                                <option value="culture">Art, History & Museums</option>
+                                <option value="foodie" selected>Street Food & Hidden Cafes</option>
+                                <option value="architecture">Iconic Architecture & Views</option>
+                                <option value="budget">Free Attractions & Parks</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 mb-1">Special Preferences or Constraints</label>
+                        <input type="text" id="tourCustomNotes" placeholder="e.g. Vegetarian foodie, minimal walking, stroller friendly" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition">
+                    </div>
+
+                    <button id="btnGenerateTour" onclick="handleGenerateTour()" class="w-full py-2.5 px-4 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-slate-950 font-bold rounded-lg text-sm shadow-md shadow-cyan-500/20 transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-sparkles"></i>
+                        <span>Generate Personalized Urban Tour</span>
+                    </button>
+                </div>
+
+                <div id="tourismResultsContainer" class="space-y-2 pt-2 max-h-72 overflow-y-auto pr-1">
+                    <div class="text-center py-6 text-slate-500 text-xs">
+                        <i class="fa-solid fa-binoculars text-2xl text-slate-600 mb-2"></i>
+                        <p>Customize your preferences and let the AI build a time-optimized sightseeing route.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 3: AI Copilot & Real-Time Querying -->
+            <div id="panelCopilot" class="glass-panel p-5 rounded-2xl flex flex-col space-y-4 shadow-xl border-t-2 border-t-indigo-500 hidden h-[500px]">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div>
+                        <h2 class="font-bold text-slate-100 flex items-center gap-2">
+                            <i class="fa-solid fa-robot text-indigo-400"></i>
+                            Gemini Urban Assistant
+                        </h2>
+                        <p class="text-xs text-slate-400">Ask any question about transit, safety, transfers, or hidden gems</p>
+                    </div>
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-300 border border-indigo-800">
+                        Live Grounding
+                    </span>
+                </div>
+
+                <div id="chatMessageHistory" class="flex-1 overflow-y-auto space-y-3 pr-2 text-xs">
+                    <div class="bg-slate-900 border border-slate-800 p-3 rounded-xl max-w-[90%] text-slate-200">
+                        <p class="font-semibold text-teal-400 mb-1 flex items-center gap-1.5">
+                            <i class="fa-solid fa-circle-nodes"></i> Nexus Assistant
+                        </p>
+                        Hello! I am your AI urban navigator. Ask me about weather delays, the quickest transit transfers, tourist pass recommendations, or off-the-beaten-path dining spots!
+                    </div>
+                </div>
+
+                <!-- Quick Suggested Prompt Chips -->
+                <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px] text-slate-400">
+                    <button onclick="sendQuickPrompt('What is the best way to get to JFK or major airport during morning rush hour?')" class="bg-slate-800/90 hover:bg-slate-700 px-2.5 py-1 rounded-full whitespace-nowrap border border-slate-700 text-slate-300">
+                        ✈️ Airport Transfer Peak
+                    </button>
+                    <button onclick="sendQuickPrompt('Give me a 3-stop architectural walking tour under 2 hours')" class="bg-slate-800/90 hover:bg-slate-700 px-2.5 py-1 rounded-full whitespace-nowrap border border-slate-700 text-slate-300">
+                        🏛️ 2hr Arch Walk
+                    </button>
+                    <button onclick="sendQuickPrompt('Are bike shares recommended today based on current urban traffic?')" class="bg-slate-800/90 hover:bg-slate-700 px-2.5 py-1 rounded-full whitespace-nowrap border border-slate-700 text-slate-300">
+                        🚲 Bike Share Safety
+                    </button>
+                </div>
+
+                <!-- Chat Input Box -->
+                <div class="flex gap-2">
+                    <input type="text" id="chatInput" placeholder="Ask anything about this city's routes or sights..." class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+                    <button id="btnSendChat" onclick="handleSendChat()" class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition flex items-center gap-1">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Column: Interactive Map, Layer Controls, and Route Detail Preview (7 Cols) -->
+        <section class="lg:col-span-7 flex flex-col space-y-4">
+            
+            <!-- Map Container with Float Overlay Controls -->
+            <div class="glass-panel p-2 rounded-2xl relative overflow-hidden shadow-2xl border border-slate-800 flex-1 min-h-[480px] lg:min-h-[560px] flex flex-col">
+                
+                <!-- Floating Map Controls Header -->
+                <div class="absolute top-4 left-4 right-4 z-[400] flex flex-wrap items-center justify-between pointer-events-none gap-2">
+                    <div class="pointer-events-auto bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-700/80 shadow-lg flex items-center gap-2">
+                        <span id="activeMapCityLabel" class="text-xs font-bold text-slate-200">New York City</span>
+                        <span class="text-slate-600">•</span>
+                        <span id="activeRouteOverview" class="text-xs text-teal-400 font-medium">Ready for Route</span>
+                    </div>
+
+                    <!-- Map Layer Controls -->
+                    <div class="pointer-events-auto bg-slate-900/90 backdrop-blur-md p-1 rounded-xl border border-slate-700/80 shadow-lg flex items-center gap-1 text-xs">
+                        <button id="layerTrafficBtn" onclick="toggleTrafficLayer()" class="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:text-white transition flex items-center gap-1.5">
+                            <i class="fa-solid fa-car-tunnel text-rose-400"></i>
+                            <span class="hidden sm:inline">Traffic Overlay</span>
+                        </button>
+                        <button id="layerTransitBtn" onclick="toggleTransitLayer()" class="px-2.5 py-1 rounded-lg bg-teal-900/60 text-teal-300 hover:text-white transition flex items-center gap-1.5">
+                            <i class="fa-solid fa-train text-teal-400"></i>
+                            <span class="hidden sm:inline">Transit Hubs</span>
+                        </button>
+                        <button onclick="resetMapView()" class="p-1 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300" title="Reset View">
+                            <i class="fa-solid fa-crosshairs"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Leaflet Map Canvas Element -->
+                <div id="map" class="w-full h-full rounded-xl z-0" style="min-height: 480px;"></div>
+
+                <!-- Map Bottom Dynamic Overlay Info Bar -->
+                <div id="mapBottomOverlay" class="p-3 bg-slate-900/95 border-t border-slate-800 rounded-b-xl flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div class="flex items-center space-x-4 text-slate-300">
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
+                            <span>Low Congestion</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-3 h-3 rounded-full bg-amber-500 inline-block"></span>
+                            <span>Moderate</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-3 h-3 rounded-full bg-rose-500 inline-block"></span>
+                            <span>Heavy Jams</span>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <button onclick="simulateLiveMovement()" id="btnSimulateTrip" class="px-3 py-1 bg-teal-600 hover:bg-teal-500 text-slate-950 font-bold rounded-md transition flex items-center gap-1">
+                            <i class="fa-solid fa-play text-[10px]"></i>
+                            <span>Simulate Commute</span>
+                        </button>
+                        <button onclick="shareOrExportPlan()" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-md transition flex items-center gap-1 border border-slate-700">
+                            <i class="fa-solid fa-share-nodes text-[10px]"></i>
+                            <span>Share</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detailed Selected Route / Itinerary Step Cards -->
+            <div id="routeStepDetailsContainer" class="glass-panel p-4 rounded-xl border border-slate-800 text-xs text-slate-300">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="font-bold text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-list-check text-teal-400"></i> Turn-by-Turn & Schedule Breakdown
+                    </h3>
+                    <span id="activeModeBadge" class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-mono text-[10px]">Multi-modal</span>
+                </div>
+                <div id="routeStepsList" class="space-y-2">
+                    <p class="text-slate-500 italic py-2">Select or generate a route to view step-by-step navigation, transfer times, and local attractions.</p>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- Custom Dialog / Toast Container (Avoids browser alert()) -->
+    <div id="customToast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 flex items-center gap-3 bg-slate-900 border border-teal-500/50 text-slate-100 px-4 py-3 rounded-xl shadow-2xl">
+        <div id="toastIcon" class="text-teal-400 text-lg"><i class="fa-solid fa-circle-check"></i></div>
+        <div>
+            <div id="toastTitle" class="font-bold text-xs">Notification</div>
+            <div id="toastMessage" class="text-[11px] text-slate-400">Action completed successfully.</div>
+        </div>
+        <button onclick="hideToast()" class="text-slate-500 hover:text-slate-300 ml-2">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+    </div>
+
+    <script>
+        // Global State & City Profiles
+        const CITY_DATA = {
+            newyork: {
+                name: "New York City",
+                lat: 40.730610,
+                lng: -73.935242,
+                zoom: 12,
+                defaultOrigin: "Grand Central Terminal, NY",
+                defaultDest: "DUMBO, Brooklyn Bridge Park",
+                defaultCommutes: [
+                    {
+                        id: 'mta-subway',
+                        name: 'Express Subway (4/5 train + Walk)',
+                        duration: '24 mins',
+                        cost: '$2.90',
+                        co2: '0.2 kg',
+                        type: 'transit',
+                        color: '#0ea5e9',
+                        reliability: '98%',
+                        trafficScore: 'Low Delay Risk',
+                        waypoints: [
+                            [40.7527, -73.9772], // Grand Central
+                            [40.7420, -73.9875], // Flatiron
+                            [40.7128, -74.0060], // City Hall
+                            [40.7033, -73.9897]  // Dumbo
+                        ],
+                        steps: [
+                            { icon: 'fa-person-walking', text: 'Board 4/5 Express train from Grand Central - 42nd St', time: '14 min' },
+                            { icon: 'fa-train-subway', text: 'Transfer to F train or walk across Brooklyn Bridge pedestrian promenade', time: '8 min' },
+                            { icon: 'fa-location-dot', text: 'Arrive at Brooklyn Bridge Park waterfront', time: '2 min' }
+                        ]
+                    },
+                    {
+                        id: 'bike-ferry',
+                        name: 'CitiBike + NYC Ferry (Eco-Scenic)',
+                        duration: '32 mins',
+                        cost: '$4.00',
+                        co2: '0.05 kg',
+                        type: 'active',
+                        color: '#10b981',
+                        reliability: '95%',
+                        trafficScore: 'Zero Traffic Jam',
+                        waypoints: [
+                            [40.7527, -73.9772], // Grand Central
+                            [40.7450, -73.9710], // East 34th Ferry
+                            [40.7180, -73.9680], // Williamsburg Ferry
+                            [40.7033, -73.9897]  // Dumbo Pier 1
+                        ],
+                        steps: [
+                            { icon: 'fa-bicycle', text: 'Ride e-bike along dedicated 2nd Ave protected lane to E 34th St Ferry Pier', time: '11 min' },
+                            { icon: 'fa-ship', text: 'Take NYC East River Ferry down to DUMBO Pier 1', time: '18 min' },
+                            { icon: 'fa-camera', text: 'Scenic view of Manhattan Skyline en route', time: 'Bonus' }
+                        ]
+                    },
+                    {
+                        id: 'ev-rideshare',
+                        name: 'Electric Taxi / Rideshare via FDR Dr',
+                        duration: '38 mins',
+                        cost: '$32.00',
+                        co2: '1.4 kg',
+                        type: 'rideshare',
+                        color: '#f59e0b',
+                        reliability: '82%',
+                        trafficScore: 'Moderate Congestion (+11 min delay)',
+                        waypoints: [
+                            [40.7527, -73.9772],
+                            [40.7380, -73.9720],
+                            [40.7100, -73.9780],
+                            [40.7033, -73.9897]
+                        ],
+                        steps: [
+                            { icon: 'fa-car-side', text: 'Pickup at Grand Central Lexington Ave exit', time: '4 min' },
+                            { icon: 'fa-road', text: 'Transit FDR Drive South; moderate slow down near Manhattan Bridge approach', time: '28 min' },
+                            { icon: 'fa-flag-checkered', text: 'Dropoff at Washington St / Water St', time: '6 min' }
+                        ]
+                    }
+                ],
+                tourismHighlights: [
+                    { name: 'The Metropolitan Museum of Art', lat: 40.7794, lng: -73.9632, tag: 'Culture', rec: 'Spend 2.5 hrs in the American Wing and European Paintings.' },
+                    { name: 'Chelsea Market & High Line', lat: 40.7424, lng: -74.0062, tag: 'Food & Walk', rec: 'Artisan tacos, lobster rolls, and elevated park garden walk.' },
+                    { name: 'DUMBO & Brooklyn Bridge', lat: 40.7033, lng: -73.9897, tag: 'Iconic Views', rec: 'Best photo spot at Washington St looking at Manhattan Bridge.' },
+                    { name: 'Washington Square Park', lat: 40.7308, lng: -73.9973, tag: 'Vibe & Music', rec: 'Street jazz performers and Greenwich Village bohemian cafes.' }
+                ]
+            },
+            tokyo: {
+                name: "Tokyo",
+                lat: 35.6762,
+                lng: 139.6503,
+                zoom: 12,
+                defaultOrigin: "Shinjuku Station, Tokyo",
+                defaultDest: "Asakusa Senso-ji Temple",
+                defaultCommutes: [
+                    {
+                        id: 'tokyo-metro',
+                        name: 'Yamanote Line + Ginza Line',
+                        duration: '28 mins',
+                        cost: '¥340 ($2.20)',
+                        co2: '0.18 kg',
+                        type: 'transit',
+                        color: '#0ea5e9',
+                        reliability: '99.8%',
+                        trafficScore: 'Exact Precision',
+                        waypoints: [
+                            [35.6909, 139.7003], // Shinjuku
+                            [35.6895, 139.7300], // Yotsuya
+                            [35.6710, 139.7650], // Ginza
+                            [35.7148, 139.7967]  // Asakusa
+                        ],
+                        steps: [
+                            { icon: 'fa-train-subway', text: 'Board Marunouchi Line from Shinjuku to Akasaka-mitsuke', time: '10 min' },
+                            { icon: 'fa-arrows-rotate', text: 'Seamless platform transfer to Ginza Line to Asakusa', time: '16 min' },
+                            { icon: 'fa-person-walking', text: 'Exit 1 to Kaminarimon Gate', time: '2 min' }
+                        ]
+                    }
+                ],
+                tourismHighlights: [
+                    { name: 'Senso-ji Temple', lat: 35.7148, lng: 139.7967, tag: 'Historic', rec: 'Tokyo’s oldest temple with vibrant Nakamise shopping street.' },
+                    { name: 'Shibuya Crossing & Sky', lat: 35.6595, lng: 139.7004, tag: 'Modern', rec: 'World’s busiest intersection and panoramic rooftop sunset view.' },
+                    { name: 'Meiji Jingu Shrine', lat: 35.6764, lng: 139.6993, tag: 'Nature/Serene', rec: 'Forested sanctuary right in the heart of Harajuku.' }
+                ]
+            },
+            london: {
+                name: "London",
+                lat: 51.5074,
+                lng: -0.1278,
+                zoom: 12,
+                defaultOrigin: "King's Cross St. Pancras",
+                defaultDest: "Borough Market & London Bridge",
+                defaultCommutes: [
+                    {
+                        id: 'london-tube',
+                        name: 'Northern Line (Bank branch)',
+                        duration: '14 mins',
+                        cost: '£2.80',
+                        co2: '0.15 kg',
+                        type: 'transit',
+                        color: '#0ea5e9',
+                        reliability: '97%',
+                        trafficScore: 'Smooth Underground Flow',
+                        waypoints: [
+                            [51.5308, -0.1238], // Kings Cross
+                            [51.5200, -0.0900], // Old Street
+                            [51.5130, -0.0880], // Bank
+                            [51.5055, -0.0905]  // Borough
+                        ],
+                        steps: [
+                            { icon: 'fa-train-subway', text: 'Take Northern Line southbound via Bank direct to London Bridge', time: '11 min' },
+                            { icon: 'fa-utensils', text: 'Walk 3 mins to Borough Market food stalls', time: '3 min' }
+                        ]
+                    }
+                ],
+                tourismHighlights: [
+                    { name: 'Tower of London & Tower Bridge', lat: 51.5081, lng: -0.0759, tag: 'History', rec: 'Crown Jewels and glass-floor walkway over the Thames.' },
+                    { name: 'British Museum', lat: 51.5194, lng: -0.1270, tag: 'Culture', rec: 'Free entry to the Rosetta Stone and Great Court.' },
+                    { name: 'Borough Market', lat: 51.5055, lng: -0.0905, tag: 'Culinary', rec: 'Gourmet street eats and artisan cheeses.' }
+                ]
+            },
+            paris: {
+                name: "Paris",
+                lat: 48.8566,
+                lng: 2.3522,
+                zoom: 12,
+                defaultOrigin: "Gare de Lyon",
+                defaultDest: "Eiffel Tower & Champ de Mars",
+                defaultCommutes: [
+                    {
+                        id: 'paris-rer',
+                        name: 'RER C or Metro Line 1 + 6',
+                        duration: '22 mins',
+                        cost: '€2.15',
+                        co2: '0.12 kg',
+                        type: 'transit',
+                        color: '#0ea5e9',
+                        reliability: '96%',
+                        trafficScore: 'Optimal Metro Cadence',
+                        waypoints: [
+                            [48.8443, 2.3744], // Gare de Lyon
+                            [48.8530, 2.3480], // Saint-Michel
+                            [48.8584, 2.2945]  // Eiffel Tower
+                        ],
+                        steps: [
+                            { icon: 'fa-train-subway', text: 'Metro Line 1 to Franklin D. Roosevelt then Line 9 to Trocadéro', time: '19 min' },
+                            { icon: 'fa-camera', text: 'Walk down across Pont d\'Iéna towards Champ de Mars', time: '3 min' }
+                        ]
+                    }
+                ],
+                tourismHighlights: [
+                    { name: 'Musée du Louvre', lat: 48.8606, lng: 2.3376, tag: 'Art', rec: 'Enter via Richelieu wing to bypass main pyramid queue.' },
+                    { name: 'Eiffel Tower', lat: 48.8584, lng: 2.2945, tag: 'Landmark', rec: 'Book evening tickets for the 5-minute beacon light show.' },
+                    { name: 'Montmartre & Sacré-Cœur', lat: 48.8867, lng: 2.3431, tag: 'Bohemian', rec: 'Stunning city panorama and village vibes.' }
+                ]
+            },
+            mumbai: {
+                name: "Mumbai",
+                lat: 18.9220,
+                lng: 72.8347,
+                zoom: 12,
+                defaultOrigin: "Chhatrapati Shivaji Maharaj Terminus (CSMT)",
+                defaultDest: "Bandra-Kurla Complex (BKC)",
+                defaultCommutes: [
+                    {
+                        id: 'mumbai-local-metro',
+                        name: 'Harbour Line + Metro 3 / AC Local',
+                        duration: '35 mins',
+                        cost: '₹35 ($0.42)',
+                        co2: '0.22 kg',
+                        type: 'transit',
+                        color: '#0ea5e9',
+                        reliability: '94%',
+                        trafficScore: 'Bypasses Western Express Traffic',
+                        waypoints: [
+                            [18.9400, 72.8354], // CSMT
+                            [19.0178, 72.8478], // Dadar
+                            [19.0600, 72.8656]  // BKC
+                        ],
+                        steps: [
+                            { icon: 'fa-train', text: 'Board AC Local Train from CSMT to Kurla/Dadar', time: '22 min' },
+                            { icon: 'fa-bus', text: 'Electric feeder bus into central BKC Financial District', time: '13 min' }
+                        ]
+                    }
+                ],
+                tourismHighlights: [
+                    { name: 'Gateway of India & Taj Mahal Palace', lat: 18.9220, lng: 72.8347, tag: 'Iconic', rec: 'Historical arch built in 1924 overlooking the Arabian Sea.' },
+                    { name: 'Marine Drive (Queen’s Necklace)', lat: 18.9430, lng: 72.8230, tag: 'Scenic Promenade', rec: 'Vibrant sunset walk with sea breezes.' },
+                    { name: 'Chhatrapati Shivaji Maharaj Vastu Museum', lat: 18.9269, lng: 72.8327, tag: 'Heritage', rec: 'Indo-Saracenic museum with exquisite ancient art.' }
+                ]
+            }
+        };
+
+        let currentCityKey = 'newyork';
+        let currentCity = CITY_DATA[currentCityKey];
+        let mapInstance = null;
+        let activeRouteLayer = null;
+        let activeMarkerGroup = null;
+        let trafficOverlayGroup = null;
+        let transitOverlayGroup = null;
+        let isTrafficLayerActive = true;
+        let isTransitLayerActive = true;
+        let simulationInterval = null;
+        let animatedCarMarker = null;
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initLeafletMap();
+            setupCitySelectors();
+            renderInitialCommuteOptions();
+            renderInitialTourismOptions();
+            updateLiveSensors();
+        });
+
+        function initLeafletMap() {
+            if (mapInstance) {
+                mapInstance.remove();
+            }
+
+            // Dark CartoDB Positron / Dark Matter Tiles for sleek aesthetic
+            mapInstance = L.map('map', {
+                zoomControl: false,
+                attributionControl: false
+            }).setView([currentCity.lat, currentCity.lng], currentCity.zoom);
+
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                maxZoom: 19,
+                subdomains: 'abcd',
+            }).addTo(mapInstance);
+
+            // Add clean zoom control at bottom right
+            L.control.zoom({ position: 'bottomright' }).addTo(mapInstance);
+
+            activeMarkerGroup = L.layerGroup().addTo(mapInstance);
+            trafficOverlayGroup = L.layerGroup().addTo(mapInstance);
+            transitOverlayGroup = L.layerGroup().addTo(mapInstance);
+
+            // Render layer features
+            renderTrafficHeatmap();
+            renderTransitHubMarkers();
+            
+            // Auto plot first commute preview
+            if (currentCity.defaultCommutes && currentCity.defaultCommutes.length > 0) {
+                plotRouteOnMap(currentCity.defaultCommutes[0]);
+            }
+        }
+
+        function setupCitySelectors() {
+            const citySelect = document.getElementById('citySelect');
+            citySelect.addEventListener('change', (e) => {
+                const selectedKey = e.target.value;
+                if (CITY_DATA[selectedKey]) {
+                    currentCityKey = selectedKey;
+                    currentCity = CITY_DATA[selectedKey];
+                    
+                    document.getElementById('activeMapCityLabel').textContent = currentCity.name;
+                    document.getElementById('commuteOrigin').value = currentCity.defaultOrigin;
+                    document.getElementById('commuteDestination').value = currentCity.defaultDest;
+
+                    mapInstance.setView([currentCity.lat, currentCity.lng], currentCity.zoom);
+                    
+                    renderTrafficHeatmap();
+                    renderTransitHubMarkers();
+                    renderInitialCommuteOptions();
+                    renderInitialTourismOptions();
+                    updateLiveSensors();
+                    showToast(`Switched to ${currentCity.name}`, 'fa-circle-check');
+                }
+            });
+        }
+
+        function resetMapView() {
+            if (mapInstance && currentCity) {
+                mapInstance.flyTo([currentCity.lat, currentCity.lng], currentCity.zoom, { duration: 1.2 });
+            }
+        }
+
+        function renderTrafficHeatmap() {
+            trafficOverlayGroup.clearLayers();
+            if (!isTrafficLayerActive) return;
+
+            // Generate realistic traffic line segments around the city center
+            const centerLat = currentCity.lat;
+            const centerLng = currentCity.lng;
+
+            const mockCongestionArcs = [
+                { offset: [0.015, -0.012], len: 0.025, color: '#ef4444', label: 'Severe Slowdown: Bridge Approach' },
+                { offset: [-0.02, 0.018], len: 0.03, color: '#f59e0b', label: 'Moderate Flow: Expressway Construction' },
+                { offset: [0.005, 0.022], len: 0.02, color: '#10b981', label: 'Clear Corridor: Arterial Transit Lane' }
+            ];
+
+            mockCongestionArcs.forEach((item, index) => {
+                const p1 = [centerLat + item.offset[0], centerLng + item.offset[1]];
+                const p2 = [centerLat + item.offset[0] + item.len, centerLng + item.offset[1] + (item.len * 0.5)];
+                
+                const poly = L.polyline([p1, p2], {
+                    color: item.color,
+                    weight: 6,
+                    opacity: 0.75,
+                    dashArray: item.color === '#ef4444' ? '6, 6' : undefined
+                }).addTo(trafficOverlayGroup);
+
+                poly.bindPopup(`
+                    <div class="text-xs">
+                        <span class="font-bold text-slate-100"><i class="fa-solid fa-triangle-exclamation mr-1 text-amber-400"></i> Traffic Radar</span>
+                        <p class="text-slate-300 mt-1">${item.label}</p>
+                    </div>
+                `);
+            });
+        }
+
+        function renderTransitHubMarkers() {
+            transitOverlayGroup.clearLayers();
+            if (!isTransitLayerActive) return;
+
+            currentCity.tourismHighlights.forEach(poi => {
+                const customIcon = L.divIcon({
+                    className: 'custom-poi-marker',
+                    html: `<div class="w-7 h-7 rounded-full bg-slate-900 border-2 border-cyan-400 flex items-center justify-center text-cyan-400 text-xs shadow-lg shadow-cyan-500/40">
+                             <i class="fa-solid fa-star"></i>
+                           </div>`,
+                    iconSize: [28, 28],
+                    iconAnchor: [14, 14]
+                });
+
+                const marker = L.marker([poi.lat, poi.lng], { icon: customIcon }).addTo(transitOverlayGroup);
+                marker.bindPopup(`
+                    <div class="p-1 text-xs">
+                        <span class="font-bold text-teal-300 text-sm">${poi.name}</span>
+                        <div class="inline-block my-1 px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 text-[10px] font-mono border border-cyan-800">${poi.tag}</div>
+                        <p class="text-slate-300 mt-1">${poi.rec}</p>
+                    </div>
+                `);
+            });
+        }
+
+        function toggleTrafficLayer() {
+            isTrafficLayerActive = !isTrafficLayerActive;
+            const btn = document.getElementById('layerTrafficBtn');
+            if (isTrafficLayerActive) {
+                renderTrafficHeatmap();
+                btn.className = "px-2.5 py-1 rounded-lg bg-rose-950/70 border border-rose-800 text-rose-300 transition flex items-center gap-1.5";
+                showToast("Traffic overlay enabled", "fa-car-tunnel");
+            } else {
+                trafficOverlayGroup.clearLayers();
+                btn.className = "px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 transition flex items-center gap-1.5";
+                showToast("Traffic overlay hidden", "fa-eye-slash");
+            }
+        }
+
+        function toggleTransitLayer() {
+            isTransitLayerActive = !isTransitLayerActive;
+            const btn = document.getElementById('layerTransitBtn');
+            if (isTransitLayerActive) {
+                renderTransitHubMarkers();
+                btn.className = "px-2.5 py-1 rounded-lg bg-teal-900/60 border border-teal-700 text-teal-300 transition flex items-center gap-1.5";
+                showToast("Transit points shown", "fa-train");
+            } else {
+                transitOverlayGroup.clearLayers();
+                btn.className = "px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 transition flex items-center gap-1.5";
+                showToast("Transit points hidden", "fa-eye-slash");
+            }
+        }
+
+        function plotRouteOnMap(route) {
+            if (!route || !route.waypoints || route.waypoints.length === 0) return;
+
+            // Clear existing polyline
+            if (activeRouteLayer) {
+                mapInstance.removeLayer(activeRouteLayer);
+            }
+            activeMarkerGroup.clearLayers();
+
+            // Clear animated marker if active
+            if (simulationInterval) {
+                clearInterval(simulationInterval);
+                simulationInterval = null;
+            }
+            if (animatedCarMarker) {
+                mapInstance.removeLayer(animatedCarMarker);
+                animatedCarMarker = null;
+            }
+
+            // Draw new styled path
+            activeRouteLayer = L.polyline(route.waypoints, {
+                color: route.color || '#14b8a6',
+                weight: 6,
+                opacity: 0.9,
+                lineCap: 'round',
+                lineJoin: 'round'
+            }).addTo(mapInstance);
+
+            // Add Origin Marker
+            const startPt = route.waypoints[0];
+            const endPt = route.waypoints[route.waypoints.length - 1];
+
+            const startIcon = L.divIcon({
+                html: `<div class="w-8 h-8 rounded-full bg-teal-500 border-2 border-white flex items-center justify-center text-slate-950 font-bold text-xs shadow-xl"><i class="fa-solid fa-play"></i></div>`,
+                iconSize: [32, 32],
+                iconAnchor: [16, 16]
+            });
+            const endIcon = L.divIcon({
+                html: `<div class="w-8 h-8 rounded-full bg-rose-500 border-2 border-white flex items-center justify-center text-white font-bold text-xs shadow-xl"><i class="fa-solid fa-flag-checkered"></i></div>`,
+                iconSize: [32, 32],
+                iconAnchor: [16, 16]
+            });
+
+            L.marker(startPt, { icon: startIcon }).addTo(activeMarkerGroup).bindPopup(`<b>Start Point</b>`);
+            L.marker(endPt, { icon: endIcon }).addTo(activeMarkerGroup).bindPopup(`<b>Destination:</b> ${route.name}`);
+
+            // Fit map nicely around route with padding
+            mapInstance.fitBounds(activeRouteLayer.getBounds(), { padding: [60, 60], maxZoom: 15 });
+
+            // Update Header status
+            document.getElementById('activeRouteOverview').textContent = `${route.name} (${route.duration})`;
+            document.getElementById('activeModeBadge').textContent = route.type.toUpperCase();
+
+            renderTurnByTurnSteps(route);
+        }
+
+        function renderTurnByTurnSteps(route) {
+            const listContainer = document.getElementById('routeStepsList');
+            listContainer.innerHTML = '';
+
+            if (!route.steps || route.steps.length === 0) {
+                listContainer.innerHTML = `<p class="text-slate-500 italic">Direct journey. Follow marked transit lanes.</p>`;
+                return;
+            }
+
+            route.steps.forEach((step, idx) => {
+                const item = document.createElement('div');
+                item.className = "p-2.5 rounded-lg bg-slate-900 border border-slate-800 flex items-start justify-between gap-3 hover:border-slate-700 transition";
+                item.innerHTML = `
+                    <div class="flex items-start gap-3">
+                        <div class="w-6 h-6 rounded-md bg-slate-800 text-teal-400 flex items-center justify-center text-xs mt-0.5 flex-shrink-0">
+                            <i class="fa-solid ${step.icon || 'fa-arrow-right'}"></i>
+                        </div>
+                        <div>
+                            <p class="font-medium text-slate-200">${step.text}</p>
+                            <span class="text-[10px] text-slate-500">Step ${idx + 1}</span>
+                        </div>
+                    </div>
+                    <span class="text-teal-300 font-mono text-xs font-semibold whitespace-nowrap">${step.time}</span>
+                `;
+                listContainer.appendChild(item);
+            });
+        }
+
+        function simulateLiveMovement() {
+            if (!activeRouteLayer) {
+                showToast("Please calculate or select a route first!", "fa-circle-exclamation");
+                return;
+            }
+
+            const waypoints = activeRouteLayer.getLatLngs();
+            if (waypoints.length < 2) return;
+
+            if (simulationInterval) {
+                clearInterval(simulationInterval);
+                simulationInterval = null;
+                if (animatedCarMarker) mapInstance.removeLayer(animatedCarMarker);
+            }
+
+            // Create animated dot marker
+            const vehicleIcon = L.divIcon({
+                html: `<div class="w-6 h-6 rounded-full bg-amber-400 border-2 border-slate-950 flex items-center justify-center text-slate-950 text-xs shadow-lg pulse-dot">
+                         <i class="fa-solid fa-location-arrow"></i>
+                       </div>`,
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]
+            });
+
+            animatedCarMarker = L.marker(waypoints[0], { icon: vehicleIcon }).addTo(mapInstance);
+            
+            let currentWaypointIdx = 0;
+            let stepFraction = 0;
+            const stepsPerSegment = 25;
+
+            showToast("Commute transit simulation active...", "fa-play");
+
+            simulationInterval = setInterval(() => {
+                if (currentWaypointIdx >= waypoints.length - 1) {
+                    clearInterval(simulationInterval);
+                    simulationInterval = null;
+                    showToast("Simulated commuter arrived at destination!", "fa-circle-check");
+                    return;
+                }
+
+                const p1 = waypoints[currentWaypointIdx];
+                const p2 = waypoints[currentWaypointIdx + 1];
+
+                stepFraction += 1 / stepsPerSegment;
+                const curLat = p1.lat + (p2.lat - p1.lat) * stepFraction;
+                const curLng = p1.lng + (p2.lng - p1.lng) * stepFraction;
+
+                animatedCarMarker.setLatLng([curLat, curLng]);
+
+                if (stepFraction >= 1) {
+                    stepFraction = 0;
+                    currentWaypointIdx++;
+                }
+            }, 60);
+        }
+
+        function renderInitialCommuteOptions() {
+            const container = document.getElementById('commuteResultsContainer');
+            container.innerHTML = '';
+
+            const commutes = currentCity.defaultCommutes || [];
+            commutes.forEach((c, idx) => {
+                const card = document.createElement('div');
+                card.className = `p-3 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-teal-500/60 cursor-pointer transition flex flex-col space-y-2 ${idx === 0 ? 'ring-1 ring-teal-500' : ''}`;
+                card.onclick = () => {
+                    // Update active ring style
+                    Array.from(container.children).forEach(ch => ch.classList.remove('ring-1', 'ring-teal-500'));
+                    card.classList.add('ring-1', 'ring-teal-500');
+                    plotRouteOnMap(c);
+                };
+
+                let typeBadge = '';
+                if (c.type === 'transit') typeBadge = '<span class="text-[10px] bg-sky-950 text-sky-300 border border-sky-800 px-2 py-0.5 rounded-full">Subway / Rail</span>';
+                else if (c.type === 'active') typeBadge = '<span class="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800 px-2 py-0.5 rounded-full">Active & Ferry</span>';
+                else typeBadge = '<span class="text-[10px] bg-amber-950 text-amber-300 border border-amber-800 px-2 py-0.5 rounded-full">Rideshare EV</span>';
+
+                card.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <span class="font-bold text-slate-200 text-xs flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full" style="background: ${c.color}"></span>
+                            ${c.name}
+                        </span>
+                        ${typeBadge}
+                    </div>
+                    <div class="grid grid-cols-3 gap-1 py-1 text-center bg-slate-950/60 rounded-lg text-xs">
+                        <div>
+                            <span class="text-[10px] text-slate-500 block">ETA</span>
+                            <span class="font-bold text-teal-400">${c.duration}</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-500 block">Cost</span>
+                            <span class="font-bold text-slate-200">${c.cost}</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-500 block">CO₂</span>
+                            <span class="font-bold text-emerald-400">${c.co2}</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800/60">
+                        <span><i class="fa-solid fa-gauge text-slate-500 mr-1"></i> ${c.trafficScore}</span>
+                        <span class="text-teal-400 font-medium">Select Route <i class="fa-solid fa-chevron-right text-[9px] ml-1"></i></span>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        async function handleOptimizeCommute() {
+            const origin = document.getElementById('commuteOrigin').value.trim();
+            const destination = document.getElementById('commuteDestination').value.trim();
+            const priority = document.getElementById('commutePriority').value;
+            const modeFilter = document.getElementById('commuteModeFilter').value;
+            const btn = document.getElementById('btnOptimizeCommute');
+
+            if (!origin || !destination) {
+                showToast("Please specify both origin and destination", "fa-circle-exclamation");
+                return;
+            }
+
+            const originalBtnHTML = btn.innerHTML;
+            btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i><span>Analyzing Traffic & Neural Routes...</span>`;
+            btn.disabled = true;
+
+            const prompt = `You are an AI Urban Commute & Transit Optimization engine for ${currentCity.name}.
+A commuter wants to travel from "${origin}" to "${destination}".
+Priority: ${priority}.
+Mode restriction: ${modeFilter}.
+City coordinates center roughly at lat: ${currentCity.lat}, lng: ${currentCity.lng}.
+
+Analyze current simulated traffic congestion, public transit timetables, and micromobility options.
+Return a JSON array containing 3 distinct multi-modal commute options matching these parameters.
+Generate realistic latitude/longitude waypoints (3 to 5 coordinate pairs) near the city of ${currentCity.name}.
+
+Response must follow this exact JSON schema:
+[
+  {
+    "id": "unique-id",
+    "name": "Route descriptive title (e.g. Metro Line 1 Express)",
+    "duration": "e.g. 26 mins",
+    "cost": "e.g. $2.90",
+    "co2": "e.g. 0.25 kg",
+    "type": "transit" or "active" or "rideshare",
+    "color": "#0ea5e9" or "#10b981" or "#f59e0b",
+    "reliability": "e.g. 96%",
+    "trafficScore": "Short congestion impact description",
+    "waypoints": [[lat, lng], [lat, lng], [lat, lng]],
+    "steps": [
+      { "icon": "fa-train-subway", "text": "Step description", "time": "10 min" },
+      { "icon": "fa-person-walking", "text": "Step description", "time": "5 min" }
+    ]
+  }
+]`;
+
+            try {
+                const apiKey = "";
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+                const payload = {
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: {
+                        responseMimeType: "application/json"
+                    }
+                };
+
+                const res = await fetchWithRetry(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+                const rawJson = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+                if (rawJson) {
+                    const parsedRoutes = JSON.parse(rawJson);
+                    if (Array.isArray(parsedRoutes) && parsedRoutes.length > 0) {
+                        displayDynamicCommuteResults(parsedRoutes);
+                        plotRouteOnMap(parsedRoutes[0]);
+                        showToast(`Calculated 3 AI commute alternatives for ${origin}`, "fa-circle-check");
+                    }
+                } else {
+                    throw new Error("No payload returned");
+                }
+            } catch (err) {
+                console.warn("AI Fallback applied for Commute:", err);
+                // Graceful fallback route generation
+                const fallbackRoutes = generateFallbackCommutes(origin, destination);
+                displayDynamicCommuteResults(fallbackRoutes);
+                plotRouteOnMap(fallbackRoutes[0]);
+                showToast("Route generated using local offline transit model", "fa-circle-check");
+            } finally {
+                btn.innerHTML = originalBtnHTML;
+                btn.disabled = false;
+            }
+        }
+
+        function displayDynamicCommuteResults(routes) {
+            const container = document.getElementById('commuteResultsContainer');
+            container.innerHTML = '';
+
+            routes.forEach((c, idx) => {
+                const card = document.createElement('div');
+                card.className = `p-3 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-teal-500/60 cursor-pointer transition flex flex-col space-y-2 ${idx === 0 ? 'ring-1 ring-teal-500' : ''}`;
+                card.onclick = () => {
+                    Array.from(container.children).forEach(ch => ch.classList.remove('ring-1', 'ring-teal-500'));
+                    card.classList.add('ring-1', 'ring-teal-500');
+                    plotRouteOnMap(c);
+                };
+
+                let typeBadge = `<span class="text-[10px] bg-slate-800 text-teal-300 px-2 py-0.5 rounded-full uppercase">${c.type || 'MULTI-MODAL'}</span>`;
+
+                card.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <span class="font-bold text-slate-200 text-xs flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full" style="background: ${c.color || '#14b8a6'}"></span>
+                            ${c.name}
+                        </span>
+                        ${typeBadge}
+                    </div>
+                    <div class="grid grid-cols-3 gap-1 py-1 text-center bg-slate-950/60 rounded-lg text-xs">
+                        <div>
+                            <span class="text-[10px] text-slate-500 block">ETA</span>
+                            <span class="font-bold text-teal-400">${c.duration}</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-500 block">Cost</span>
+                            <span class="font-bold text-slate-200">${c.cost}</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-500 block">CO₂</span>
+                            <span class="font-bold text-emerald-400">${c.co2}</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800/60">
+                        <span><i class="fa-solid fa-gauge text-slate-500 mr-1"></i> ${c.trafficScore || 'Real-time optimized'}</span>
+                        <span class="text-teal-400 font-medium">Select Route <i class="fa-solid fa-chevron-right text-[9px] ml-1"></i></span>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function generateFallbackCommutes(origin, dest) {
+            const baseLat = currentCity.lat;
+            const baseLng = currentCity.lng;
+            return [
+                {
+                    id: 'opt-metro-fast',
+                    name: `Express Rapid Transit: ${origin.split(',')[0]} ➔ ${dest.split(',')[0]}`,
+                    duration: '27 mins',
+                    cost: '$2.90',
+                    co2: '0.22 kg',
+                    type: 'transit',
+                    color: '#0ea5e9',
+                    trafficScore: 'Bypasses surface traffic slowdowns',
+                    waypoints: [
+                        [baseLat + 0.01, baseLng - 0.02],
+                        [baseLat, baseLng],
+                        [baseLat - 0.015, baseLng + 0.015]
+                    ],
+                    steps: [
+                        { icon: 'fa-person-walking', text: `Walk 4 mins from ${origin.split(',')[0]}`, time: '4 min' },
+                        { icon: 'fa-train-subway', text: 'Catch Express Rail to Central Interchange', time: '18 min' },
+                        { icon: 'fa-location-dot', text: `Walk 5 mins to ${dest.split(',')[0]}`, time: '5 min' }
+                    ]
+                },
+                {
+                    id: 'opt-eco-bike',
+                    name: 'Urban Greenway & E-Bike Flow',
+                    duration: '34 mins',
+                    cost: '$3.50',
+                    co2: '0.02 kg',
+                    type: 'active',
+                    color: '#10b981',
+                    trafficScore: '100% Protected Cycle Infrastructure',
+                    waypoints: [
+                        [baseLat + 0.01, baseLng - 0.02],
+                        [baseLat + 0.005, baseLng - 0.008],
+                        [baseLat - 0.015, baseLng + 0.015]
+                    ],
+                    steps: [
+                        { icon: 'fa-bicycle', text: 'Unlock micromobility e-bike at station', time: '2 min' },
+                        { icon: 'fa-route', text: 'Cycle along riverside scenic protected trail', time: '28 min' },
+                        { icon: 'fa-square-parking', text: 'Dock at designated corral', time: '4 min' }
+                    ]
+                }
+            ];
+        }
+
+        function renderInitialTourismOptions() {
+            const container = document.getElementById('tourismResultsContainer');
+            container.innerHTML = '';
+
+            const highlights = currentCity.tourismHighlights || [];
+            highlights.forEach((poi) => {
+                const item = document.createElement('div');
+                item.className = "p-3 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-cyan-500/50 transition cursor-pointer";
+                item.onclick = () => {
+                    mapInstance.flyTo([poi.lat, poi.lng], 15, { duration: 1.0 });
+                    showToast(`Viewing ${poi.name}`, 'fa-landmark');
+                };
+                item.innerHTML = `
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="font-bold text-xs text-slate-200">${poi.name}</span>
+                        <span class="text-[10px] px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">${poi.tag}</span>
+                    </div>
+                    <p class="text-[11px] text-slate-400">${poi.rec}</p>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        async function handleGenerateTour() {
+            const duration = document.getElementById('tourDuration').value;
+            const vibe = document.getElementById('tourVibe').value;
+            const customNotes = document.getElementById('tourCustomNotes').value.trim();
+            const btn = document.getElementById('btnGenerateTour');
+
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i><span>Crafting Personalized Tour...</span>`;
+            btn.disabled = true;
+
+            const prompt = `You are an expert urban tourism concierge and local guide for ${currentCity.name}.
+Design an optimized sightseeing itinerary.
+Duration: ${duration}.
+Traveler Vibe: ${vibe}.
+Special preferences: "${customNotes || 'None'}".
+City coordinates roughly centered at [${currentCity.lat}, ${currentCity.lng}].
+
+Output an itinerary with 3 to 4 sequential stops ordered logically to minimize transit time.
+Return valid JSON only matching:
+{
+  "tourTitle": "Catchy Title (e.g. Hidden Flavors & Historic Alleys)",
+  "totalDuration": "e.g. 5.5 Hours",
+  "recommendedTransitPass": "e.g. 1-Day Metro Discovery Pass",
+  "stops": [
+    {
+      "time": "10:00 AM",
+      "name": "Attraction / Venue Name",
+      "lat": ${currentCity.lat} + offset,
+      "lng": ${currentCity.lng} + offset,
+      "duration": "1.5 hours",
+      "insiderTip": "Specific local tip (e.g. try the almond croissant, skip the front line)",
+      "transitToNext": "Walk 10 mins down Grand Ave"
+    }
+  ]
+}`;
+
+            try {
+                const apiKey = "";
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+                const payload = {
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { responseMimeType: "application/json" }
+                };
+
+                const res = await fetchWithRetry(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+                const rawJson = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+                if (rawJson) {
+                    const parsedTour = JSON.parse(rawJson);
+                    displayTourResults(parsedTour);
+                } else {
+                    throw new Error("Empty tourist response");
+                }
+            } catch (err) {
+                console.warn("Tour fallback:", err);
+                const fallbackTour = {
+                    tourTitle: `${currentCity.name} Highlights & Hidden Gems`,
+                    totalDuration: "Full Day",
+                    recommendedTransitPass: "Day Transit Pass",
+                    stops: currentCity.tourismHighlights.map((poi, idx) => ({
+                        time: `${10 + idx * 2}:00 AM`,
+                        name: poi.name,
+                        lat: poi.lat,
+                        lng: poi.lng,
+                        duration: "1.5 hours",
+                        insiderTip: poi.rec,
+                        transitToNext: "Short subway / stroll"
+                    }))
+                };
+                displayTourResults(fallbackTour);
+            } finally {
+                btn.innerHTML = originalHTML;
+                btn.disabled = false;
+            }
+        }
+
+        function displayTourResults(tour) {
+            const container = document.getElementById('tourismResultsContainer');
+            container.innerHTML = '';
+
+            const headerCard = document.createElement('div');
+            headerCard.className = "p-3 rounded-xl bg-cyan-950/40 border border-cyan-800 text-xs mb-3";
+            headerCard.innerHTML = `
+                <h4 class="font-bold text-cyan-300 text-sm mb-1">${tour.tourTitle}</h4>
+                <div class="flex items-center justify-between text-[11px] text-slate-300">
+                    <span><i class="fa-solid fa-clock text-cyan-400 mr-1"></i> ${tour.totalDuration}</span>
+                    <span><i class="fa-solid fa-ticket text-amber-400 mr-1"></i> ${tour.recommendedTransitPass || 'Pay-as-you-go'}</span>
+                </div>
+            `;
+            container.appendChild(headerCard);
+
+            const tourWaypoints = [];
+
+            tour.stops.forEach((stop, i) => {
+                tourWaypoints.push([stop.lat, stop.lng]);
+                const stopCard = document.createElement('div');
+                stopCard.className = "p-3 rounded-xl bg-slate-900 border border-slate-800 hover:border-cyan-500 transition cursor-pointer mb-2";
+                stopCard.onclick = () => {
+                    mapInstance.flyTo([stop.lat, stop.lng], 16, { duration: 1.0 });
+                };
+                stopCard.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <span class="font-bold text-slate-200 text-xs flex items-center gap-1.5">
+                            <span class="w-5 h-5 rounded-full bg-cyan-500 text-slate-950 font-bold text-[10px] flex items-center justify-center">${i + 1}</span>
+                            ${stop.name}
+                        </span>
+                        <span class="text-teal-400 font-mono text-[11px]">${stop.time}</span>
+                    </div>
+                    <p class="text-[11px] text-slate-300 mt-1"><i class="fa-solid fa-lightbulb text-amber-400 mr-1"></i> ${stop.insiderTip}</p>
+                    ${stop.transitToNext ? `<span class="text-[10px] text-slate-500 block mt-1"><i class="fa-solid fa-arrow-turn-down mr-1"></i> ${stop.transitToNext}</span>` : ''}
+                `;
+                container.appendChild(stopCard);
+            });
+
+            // Plot entire tour as an interactive route on the map
+            const tourRoute = {
+                name: tour.tourTitle,
+                duration: tour.totalDuration,
+                type: 'tourism',
+                color: '#06b6d4',
+                waypoints: tourWaypoints,
+                steps: tour.stops.map(s => ({ icon: 'fa-camera', text: `${s.name} (${s.insiderTip})`, time: s.time }))
+            };
+            plotRouteOnMap(tourRoute);
+            showToast("Tour mapped with sequential waypoints", "fa-map-location-dot");
+        }
+
+        async function handleSendChat() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            if (!message) return;
+
+            input.value = '';
+            appendChatMessage('user', message);
+
+            const btn = document.getElementById('btnSendChat');
+            btn.disabled = true;
+
+            const chatHistoryContainer = document.getElementById('chatMessageHistory');
+            const typingBubble = document.createElement('div');
+            typingBubble.id = 'copilotTyping';
+            typingBubble.className = "bg-slate-900 border border-slate-800 p-3 rounded-xl max-w-[90%] text-slate-400 text-xs italic flex items-center gap-2";
+            typingBubble.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin text-teal-400"></i> Querying urban transportation network...`;
+            chatHistoryContainer.appendChild(typingBubble);
+            chatHistoryContainer.scrollTop = chatHistoryContainer.scrollHeight;
+
+            const prompt = `You are NexusVoyage AI, an urban mobility specialist for ${currentCity.name}.
+Answer the traveler's question with precise, pragmatic advice on local commuting, transit lines, traffic choke points, tickets, safety, or attractions.
+User query: "${message}"`;
+
+            try {
+                const apiKey = "";
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+                const payload = {
+                    contents: [{ parts: [{ text: prompt }] }],
+                    tools: [{ "google_search": {} }]
+                };
+
+                const res = await fetchWithRetry(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+                const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "I was unable to retrieve live transport data. Please verify station lines.";
+                
+                removeTypingBubble();
+                appendChatMessage('ai', text);
+            } catch (err) {
+                removeTypingBubble();
+                appendChatMessage('ai', `Based on current guidelines for ${currentCity.name}, peak commute times usually occur from 8:00 AM - 9:30 AM and 5:00 PM - 6:30 PM. Transit cards (like OMNY, Suica, Oyster, or Navigo) offer contactless tap-and-go convenience across bus, tram, and subway lines.`);
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        function sendQuickPrompt(txt) {
+            document.getElementById('chatInput').value = txt;
+            handleSendChat();
+        }
+
+        function appendChatMessage(sender, text) {
+            const container = document.getElementById('chatMessageHistory');
+            const bubble = document.createElement('div');
+            if (sender === 'user') {
+                bubble.className = "bg-teal-900/40 border border-teal-700/50 p-3 rounded-xl max-w-[90%] ml-auto text-slate-100 text-xs";
+                bubble.innerHTML = `<p class="font-semibold text-teal-300 mb-0.5 text-[10px]">You</p>${text}`;
+            } else {
+                bubble.className = "bg-slate-900 border border-slate-800 p-3 rounded-xl max-w-[90%] text-slate-200 text-xs";
+                bubble.innerHTML = `<p class="font-semibold text-teal-400 mb-0.5 text-[10px] flex items-center gap-1.5"><i class="fa-solid fa-circle-nodes"></i> Nexus Assistant</p>${text.replace(/\n/g, '<br>')}`;
+            }
+            container.appendChild(bubble);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function removeTypingBubble() {
+            const el = document.getElementById('copilotTyping');
+            if (el) el.remove();
+        }
+
+        function switchMainTab(tab) {
+            const pCommute = document.getElementById('panelCommute');
+            const pTourism = document.getElementById('panelTourism');
+            const pCopilot = document.getElementById('panelCopilot');
+
+            const btnCommute = document.getElementById('tabCommuteBtn');
+            const btnTourism = document.getElementById('tabTourismBtn');
+            const btnCopilot = document.getElementById('tabCopilotBtn');
+
+            // Reset buttons
+            [btnCommute, btnTourism, btnCopilot].forEach(b => {
+                b.className = "px-3 py-1.5 rounded-md text-xs font-medium transition-all text-slate-300 hover:text-white flex items-center gap-1.5";
+            });
+
+            pCommute.classList.add('hidden');
+            pTourism.classList.add('hidden');
+            pCopilot.classList.add('hidden');
+
+            if (tab === 'commute') {
+                pCommute.classList.remove('hidden');
+                btnCommute.className = "px-3 py-1.5 rounded-md text-xs font-medium transition-all bg-teal-600 text-white shadow-sm flex items-center gap-1.5";
+            } else if (tab === 'tourism') {
+                pTourism.classList.remove('hidden');
+                btnTourism.className = "px-3 py-1.5 rounded-md text-xs font-medium transition-all bg-cyan-600 text-white shadow-sm flex items-center gap-1.5";
+            } else if (tab === 'copilot') {
+                pCopilot.classList.remove('hidden');
+                btnCopilot.className = "px-3 py-1.5 rounded-md text-xs font-medium transition-all bg-indigo-600 text-white shadow-sm flex items-center gap-1.5";
+            }
+        }
+
+        function updateLiveSensors() {
+            const congestionLevels = [
+                { text: "Light (28%)", trend: "Optimal traffic flow", color: "text-emerald-400" },
+                { text: "Moderate (44%)", trend: "Normal peak cadence", color: "text-amber-400" },
+                { text: "Heavy (68%)", trend: "Rain slow-down", color: "text-rose-400" }
+            ];
+            const randomCongestion = congestionLevels[Math.floor(Math.random() * congestionLevels.length)];
+            
+            const statC = document.getElementById('statCongestion');
+            statC.textContent = randomCongestion.text;
+            statC.className = `text-lg font-bold ${randomCongestion.color} mt-1`;
+            document.getElementById('statCongestionTrend').textContent = randomCongestion.trend;
+
+            // Random eco savings
+            const ecoVal = (2.8 + Math.random() * 2.2).toFixed(1);
+            document.getElementById('statEcoSavings').textContent = `-${ecoVal} kg CO₂`;
+        }
+
+        function refreshTrafficConditions() {
+            const icon = document.querySelector('#trafficRefreshBtn i');
+            icon.classList.add('fa-spin');
+            setTimeout(() => {
+                icon.classList.remove('fa-spin');
+                updateLiveSensors();
+                renderTrafficHeatmap();
+                showToast("Real-time traffic sensors updated", "fa-arrows-rotate");
+            }, 700);
+        }
+
+        let toastTimeout = null;
+        function showToast(title, iconClass = 'fa-circle-check', message = '') {
+            const toast = document.getElementById('customToast');
+            document.getElementById('toastTitle').textContent = title;
+            document.getElementById('toastMessage').textContent = message || `Updated for ${currentCity.name}`;
+            document.getElementById('toastIcon').innerHTML = `<i class="fa-solid ${iconClass}"></i>`;
+
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            if (toastTimeout) clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(hideToast, 4000);
+        }
+
+        function hideToast() {
+            const toast = document.getElementById('customToast');
+            toast.classList.add('translate-y-20', 'opacity-0');
+            toast.classList.remove('translate-y-0', 'opacity-100');
+        }
+
+        function shareOrExportPlan() {
+            const origin = document.getElementById('commuteOrigin').value;
+            const dest = document.getElementById('commuteDestination').value;
+            const summary = `NexusVoyage AI Route Plan:\nCity: ${currentCity.name}\nRoute: ${origin} ➔ ${dest}\nGenerated via NexusVoyage Urban Engine`;
+
+            // Fallback clipboard copying
+            const dummy = document.createElement('textarea');
+            dummy.value = summary;
+            document.body.appendChild(dummy);
+            dummy.select();
+            document.execCommand('copy');
+            document.body.removeChild(dummy);
+
+            showToast("Plan copied to clipboard!", "fa-clipboard-check");
+        }
+
+        async function fetchWithRetry(url, options, retries = 3, backoff = 1000) {
+            try {
+                const response = await fetch(url, options);
+                if (!response.ok && retries > 0) {
+                    await new Promise(r => setTimeout(r, backoff));
+                    return fetchWithRetry(url, options, retries - 1, backoff * 2);
+                }
+                return response;
+            } catch (err) {
+                if (retries > 0) {
+                    await new Promise(r => setTimeout(r, backoff));
+                    return fetchWithRetry(url, options, retries - 1, backoff * 2);
+                }
+                throw err;
+            }
+        }
+    </script>
+</body>
+</html>
